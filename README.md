@@ -1,4 +1,4 @@
-# Firebase Auth JWT
+# Firebase Auth
 
 [![GoDoc](https://godoc.org/github.com/k2wanko/firebase-auth?status.svg)](https://godoc.org/github.com/k2wanko/firebase-auth) [![Go Report Card](https://goreportcard.com/badge/github.com/k2wanko/firebase-auth)](https://goreportcard.com/report/github.com/k2wanko/firebase-auth)
 
