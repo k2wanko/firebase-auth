@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	// ClientCertURL is
+	// ClientCertURL is URL containing the public keys for the Google certs
 	ClientCertURL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 
-	// FirebaseAidienceURL is
+	// FirebaseAidienceURL is Audience to use for Firebase Auth Custom tokens
 	FirebaseAidienceURL = "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
 )
 
