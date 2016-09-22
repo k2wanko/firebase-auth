@@ -17,8 +17,8 @@ const (
 	// ClientCertURL is URL containing the public keys for the Google certs
 	ClientCertURL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 
-	// FirebaseAidienceURL is Audience to use for Firebase Auth Custom tokens
-	FirebaseAidienceURL = "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+	// FirebaseAudienceURL is Audience to use for Firebase Auth Custom tokens
+	FirebaseAudienceURL = "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
 )
 
 // AppEngineSigningMethod is built-in AppEngine signing method
@@ -121,7 +121,7 @@ func CreateCustomToken(c context.Context, uid string, developerClaims interface{
 		"uid":    uid,
 		"iss":    sa,
 		"sub":    sa,
-		"aud":    FirebaseAidienceURL,
+		"aud":    FirebaseAudienceURL,
 		"iat":    iat.Unix(),
 		"exp":    exp.Unix(),
 		"claims": developerClaims,
