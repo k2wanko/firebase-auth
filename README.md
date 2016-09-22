@@ -19,7 +19,7 @@ import(
     'github.com/k2wanko/firebase-auth'
 )
 
-func (w http.ResponseWriter, r *http.Request) {
+func handle(w http.ResponseWriter, r *http.Request) {
     ctx := appengine.NewContext(r)
     tokStr, err := auth.CreateCustomToken(ctx, "some-uid", map[string]interface{}{
         "premium_account": true,
