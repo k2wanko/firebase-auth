@@ -21,8 +21,8 @@ const (
 	FirebaseAidienceURL = "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
 )
 
-// SigningMethod is built-in AppEngine signing method
-type SigningMethod struct{}
+// AppEngineSigningMethod is built-in AppEngine signing method
+type AppEngineSigningMethod struct{}
 
 var (
 	// BlackListedClaims is List of blacklisted claims which cannot be provided when creating a custom token
@@ -32,16 +32,16 @@ var (
 		"cnf", "c_hash", "exp", "iat", "iss", "jti", "nbf", "nonce",
 	}
 
-	signingMethod = new(SigningMethod)
+	aeSigningMethod = new(AppEngineSigningMethod)
 )
 
 // Alg is algorithm name
-func (s *SigningMethod) Alg() string {
+func (s *AppEngineSigningMethod) Alg() string {
 	return "RS256"
 }
 
 // Sign is Implment SigningMethod#Sign
-func (s *SigningMethod) Sign(signingString string, key interface{}) (string, error) {
+func (s *AppEngineSigningMethod) Sign(signingString string, key interface{}) (string, error) {
 	c, ok := key.(context.Context)
 	if !ok {
 		return "", jwt.ErrInvalidKey
@@ -55,7 +55,7 @@ func (s *SigningMethod) Sign(signingString string, key interface{}) (string, err
 }
 
 // Verify is Implment SigningMethod#Verify
-func (s *SigningMethod) Verify(signingString, signature string, key interface{}) error {
+func (s *AppEngineSigningMethod) Verify(signingString, signature string, key interface{}) error {
 	c, ok := key.(context.Context)
 	if !ok {
 		return jwt.ErrInvalidKey
@@ -127,13 +127,36 @@ func CreateCustomToken(c context.Context, uid string, developerClaims interface{
 		"claims": developerClaims,
 	}
 
-	return jwt.NewWithClaims(signingMethod, claims).SignedString(c)
+	t := &jwt.Token{
+		Header: map[string]interface{}{
+			"typ": "JWT",
+			"alg": aeSigningMethod.Alg(),
+			"kid": "appengine",
+		},
+		Claims: claims,
+		Method: aeSigningMethod,
+	}
+
+	return t.SignedString(c)
 }
 
 // VerifyIDToken is Verifies the format and signature of a Firebase Auth ID token
 func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
+	if idToken == "" {
+		return nil, errors.New("idToken is empty")
+	}
 	return jwt.Parse(idToken, func(t *jwt.Token) (interface{}, error) {
-		t.Method = signingMethod
+		kid, ok := t.Header["kid"].(string)
+		if !ok {
+			return nil, errors.New("Invalid Token")
+		}
+		if kid == "appengine" {
+			t.Method = aeSigningMethod
+		}
 		return c, nil
 	})
+}
+
+func fetchPublickKey() (crypto.PublicKey, error) {
+	return nil, nil
 }
