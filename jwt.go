@@ -40,6 +40,11 @@ func (s *AppEngineSigningMethod) Alg() string {
 	return "RS256"
 }
 
+// KeyID is identifying the type of the key
+func (s *AppEngineSigningMethod) KeyID() string {
+	return "appengine"
+}
+
 // Sign is Implment SigningMethod#Sign
 func (s *AppEngineSigningMethod) Sign(signingString string, key interface{}) (string, error) {
 	c, ok := key.(context.Context)
@@ -131,7 +136,7 @@ func CreateCustomToken(c context.Context, uid string, developerClaims interface{
 		Header: map[string]interface{}{
 			"typ": "JWT",
 			"alg": aeSigningMethod.Alg(),
-			"kid": "appengine",
+			"kid": aeSigningMethod.KeyID(),
 		},
 		Claims: claims,
 		Method: aeSigningMethod,
@@ -150,7 +155,7 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 		if !ok {
 			return nil, errors.New("Invalid Token")
 		}
-		if kid == "appengine" {
+		if kid == aeSigningMethod.KeyID() {
 			t.Method = aeSigningMethod
 		}
 		return c, nil
