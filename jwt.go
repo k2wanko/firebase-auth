@@ -116,6 +116,7 @@ func (s *AppEngineSigningMethod) Verify(signingString, signature string, key int
 	return certErr
 }
 
+// UserID is Firebase UserID from Token
 func (f *FirebaseClaims) UserID() string {
 	if f.UID != "" {
 		return f.UID
