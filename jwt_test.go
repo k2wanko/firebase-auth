@@ -55,6 +55,7 @@ func TestCreateCustomToken(t *testing.T) {
 }
 
 func TestVerifyIDToken(t *testing.T) {
+	t.Parallel()
 	c := newTestContext()
 	tokStr, err := CreateCustomToken(c, "some-id", map[string]interface{}{
 		"premium_account": true,
@@ -66,7 +67,7 @@ func TestVerifyIDToken(t *testing.T) {
 	tok, err := VerifyIDToken(c, tokStr)
 	t.Logf("tokStr = %s", tokStr)
 	if err != nil {
-		t.Errorf("jwt.Parse error: %v", err)
+		t.Errorf("VerifyIDToken error: %v", err)
 		return
 	}
 

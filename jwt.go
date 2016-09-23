@@ -4,13 +4,16 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
+	"google.golang.org/appengine/urlfetch"
 )
 
 const (
@@ -21,8 +24,26 @@ const (
 	FirebaseAudienceURL = "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
 )
 
-// AppEngineSigningMethod is built-in AppEngine signing method
-type AppEngineSigningMethod struct{}
+type (
+	// AppEngineSigningMethod is built-in AppEngine signing method
+	AppEngineSigningMethod struct{}
+
+	FirebaseClaims struct {
+		UID           string      `json:"uid,omitempty"`
+		UserIDStr     string      `json:"user_id,omitempty"`
+		Email         string      `json:"email,omitempty"`
+		EmailVerified bool        `json:"email_verified,omitempty"`
+		Claims        interface{} `json:"claims,omitempty"`
+		Firebase      *struct {
+			SignInProvider string              `json:"sign_in_provider,omitempty"`
+			Identities     map[string][]string `json:"identities,omitempty"`
+		} `json:"firebase,omitempty"`
+
+		*jwt.StandardClaims
+	}
+
+	certs map[string]crypto.PublicKey
+)
 
 var (
 	// BlackListedClaims is List of blacklisted claims which cannot be provided when creating a custom token
@@ -91,6 +112,18 @@ func (s *AppEngineSigningMethod) Verify(signingString, signature string, key int
 	return certErr
 }
 
+func (f *FirebaseClaims) UserID() string {
+	if f.UID != "" {
+		return f.UID
+	}
+
+	if f.UserIDStr != "" {
+		return f.UserIDStr
+	}
+
+	return f.Subject
+}
+
 // CreateCustomToken is Creates a new Firebase Auth Custom token.
 func CreateCustomToken(c context.Context, uid string, developerClaims interface{}) (string, error) {
 	if uid == "" {
@@ -122,14 +155,16 @@ func CreateCustomToken(c context.Context, uid string, developerClaims interface{
 	iat := time.Now()
 	exp := iat.Add(time.Hour)
 
-	claims := &jwt.MapClaims{
-		"uid":    uid,
-		"iss":    sa,
-		"sub":    sa,
-		"aud":    FirebaseAudienceURL,
-		"iat":    iat.Unix(),
-		"exp":    exp.Unix(),
-		"claims": developerClaims,
+	claims := &FirebaseClaims{
+		UID:    uid,
+		Claims: developerClaims,
+		StandardClaims: &jwt.StandardClaims{
+			Audience:  FirebaseAudienceURL,
+			ExpiresAt: exp.Unix(),
+			IssuedAt:  iat.Unix(),
+			Issuer:    sa,
+			Subject:   sa,
+		},
 	}
 
 	t := &jwt.Token{
@@ -150,18 +185,69 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 	if idToken == "" {
 		return nil, errors.New("idToken is empty")
 	}
-	return jwt.Parse(idToken, func(t *jwt.Token) (interface{}, error) {
+	return jwt.ParseWithClaims(idToken, &FirebaseClaims{}, func(t *jwt.Token) (interface{}, error) {
 		kid, ok := t.Header["kid"].(string)
 		if !ok {
-			return nil, errors.New("Invalid Token")
+			return nil, jwt.ErrInvalidKey
 		}
 		if kid == aeSigningMethod.KeyID() {
 			t.Method = aeSigningMethod
+			return c, nil
 		}
-		return c, nil
+
+		claims, _ := t.Claims.(*FirebaseClaims)
+		appID := appengine.AppID(c)
+		if claims.StandardClaims.Audience != appID {
+			return nil, errors.New("Invalid Token: aud")
+		}
+
+		iss := strings.Split(claims.StandardClaims.Issuer, "/")
+		if appID != iss[len(iss)-1:][0] {
+			return nil, errors.New("Invalid Token: iss")
+		}
+
+		if claims.StandardClaims.Subject == "" {
+			return nil, errors.New("Invalid Token: sub")
+		}
+
+		crts, err := fetchPublickKey(c)
+		if err != nil {
+			return nil, err
+		}
+
+		for id, key := range crts {
+			if kid != id {
+				continue
+			}
+			return key, nil
+		}
+
+		return nil, jwt.ErrInvalidKey
 	})
 }
 
-func fetchPublickKey() (crypto.PublicKey, error) {
-	return nil, nil
+func fetchPublickKey(c context.Context) (certs, error) {
+	hc := urlfetch.Client(c)
+	resp, err := hc.Get(ClientCertURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	t := make(map[string]string, 0)
+	err = json.NewDecoder(resp.Body).Decode(&t)
+	if err != nil {
+		return nil, err
+	}
+
+	crts := make(certs, len(t))
+	for k, v := range t {
+		key, err := jwt.ParseRSAPublicKeyFromPEM([]byte(v))
+		if err != nil {
+			return nil, err
+		}
+		crts[k] = key
+	}
+
+	return crts, nil
 }
