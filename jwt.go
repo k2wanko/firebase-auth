@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"strconv"
 	"strings"
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"golang.org/x/net/context"
+	"golang.org/x/net/context/ctxhttp"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"
 )
@@ -28,6 +31,7 @@ type (
 	// AppEngineSigningMethod is built-in AppEngine signing method
 	AppEngineSigningMethod struct{}
 
+	// FirebaseClaims is Token struct
 	FirebaseClaims struct {
 		UID           string      `json:"uid,omitempty"`
 		UserIDStr     string      `json:"user_id,omitempty"`
@@ -42,7 +46,7 @@ type (
 		*jwt.StandardClaims
 	}
 
-	certs map[string]crypto.PublicKey
+	certs map[string]*rsa.PublicKey
 )
 
 var (
@@ -210,6 +214,10 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 			return nil, errors.New("Invalid Token: sub")
 		}
 
+		if key, _ := keyCache.Get(c, kid); key != nil {
+			return key, nil
+		}
+
 		crts, err := fetchPublickKey(c)
 		if err != nil {
 			return nil, err
@@ -228,16 +236,32 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 
 func fetchPublickKey(c context.Context) (certs, error) {
 	hc := urlfetch.Client(c)
-	resp, err := hc.Get(ClientCertURL)
+	resp, err := ctxhttp.Get(c, hc, ClientCertURL)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+
+	b, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
 
 	t := make(map[string]string, 0)
-	err = json.NewDecoder(resp.Body).Decode(&t)
+	err = json.Unmarshal(b, &t)
 	if err != nil {
 		return nil, err
+	}
+
+	var exp time.Duration
+	cacheControl := resp.Header.Get("cache-control")
+	if cacheControl != "" {
+		parts := strings.Split(cacheControl, ",")
+		for _, part := range parts {
+			subPars := strings.Split(strings.TrimSpace(part), "=")
+			if subPars[0] != "max-age" {
+				continue
+			}
+			maxAge, _ := strconv.ParseInt(subPars[1], 10, 64)
+			exp = time.Duration(maxAge)
+		}
 	}
 
 	crts := make(certs, len(t))
@@ -247,6 +271,10 @@ func fetchPublickKey(c context.Context) (certs, error) {
 			return nil, err
 		}
 		crts[k] = key
+	}
+
+	if exp != 0 {
+		keyCache.Set(c, crts, exp)
 	}
 
 	return crts, nil
