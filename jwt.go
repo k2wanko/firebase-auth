@@ -65,11 +65,6 @@ func (s *AppEngineSigningMethod) Alg() string {
 	return "RS256"
 }
 
-// KeyID is identifying the type of the key
-func (s *AppEngineSigningMethod) KeyID() string {
-	return "appengine"
-}
-
 // Sign is Implment SigningMethod#Sign
 func (s *AppEngineSigningMethod) Sign(signingString string, key interface{}) (string, error) {
 	c, ok := key.(context.Context)
@@ -172,17 +167,30 @@ func CreateCustomToken(c context.Context, uid string, developerClaims interface{
 		},
 	}
 
-	t := &jwt.Token{
-		Header: map[string]interface{}{
-			"typ": "JWT",
-			"alg": aeSigningMethod.Alg(),
-			"kid": aeSigningMethod.KeyID(),
-		},
-		Claims: claims,
-		Method: aeSigningMethod,
+	certs, err := appengine.PublicCertificates(c)
+	if err != nil {
+		return "", err
 	}
 
-	return t.SignedString(c)
+	for _, cert := range certs {
+		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+		token.Header["kid"] = cert.KeyName
+		rawToken, err := token.SigningString()
+		if err != nil {
+			return "", err
+		}
+
+		keyName, sig, err := appengine.SignBytes(c, []byte(rawToken))
+		if err != nil {
+			return "", err
+		}
+
+		if keyName == cert.KeyName {
+			return strings.Join([]string{rawToken, jwt.EncodeSegment(sig)}, "."), nil
+		}
+	}
+
+	return "", errors.New("Not found key")
 }
 
 // VerifyIDToken is Verifies the format and signature of a Firebase Auth ID token
@@ -191,17 +199,18 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 		return nil, errors.New("idToken is empty")
 	}
 	return jwt.ParseWithClaims(idToken, &FirebaseClaims{}, func(t *jwt.Token) (interface{}, error) {
-		kid, ok := t.Header["kid"].(string)
-		if !ok {
-			return nil, jwt.ErrInvalidKey
-		}
-		if kid == aeSigningMethod.KeyID() {
+		appID := appengine.AppID(c)
+		if id := t.Header["aid"]; id == appID {
 			t.Method = aeSigningMethod
 			return c, nil
 		}
 
+		kid, ok := t.Header["kid"].(string)
+		if !ok {
+			return nil, jwt.ErrInvalidKey
+		}
+
 		claims, _ := t.Claims.(*FirebaseClaims)
-		appID := appengine.AppID(c)
 		if claims.StandardClaims.Audience != appID {
 			return nil, errors.New("Invalid Token: aud")
 		}
@@ -219,7 +228,7 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 			return key, nil
 		}
 
-		crts, err := fetchPublickKey(c)
+		crts, err := fetchPublicKeys(c)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +244,7 @@ func VerifyIDToken(c context.Context, idToken string) (*jwt.Token, error) {
 	})
 }
 
-func fetchPublickKey(c context.Context) (certs, error) {
+func fetchPublicKeys(c context.Context) (certs, error) {
 	hc := urlfetch.Client(c)
 	resp, err := ctxhttp.Get(c, hc, ClientCertURL)
 	if err != nil {
