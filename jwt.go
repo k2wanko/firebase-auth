@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
-	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/urlfetch"

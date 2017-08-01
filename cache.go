@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"context"
 	"crypto/rsa"
 	"time"
 
-	"golang.org/x/net/context"
 	"google.golang.org/appengine/memcache"
 )
 
