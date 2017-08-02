@@ -1,0 +1,10 @@
+runtime: go
+api_version: go1.8
+
+env_variables:
+  LINE_BOT_CLIENT_SECRET: caa822263ec4d16db36650a6078abf32
+  LINE_BOT_CLIENT_TOKEN: +CTjVkg4qI4cBdI/FnL3H/xKVm20HYMjIEErZMTVeHuhP444hsMnw1ISrWGrO5j/g6PdePjwCGgCwqnfUsSft1OmbjyFANRC9vWxmq+PVM6fZZlHw5m7uJSMYzQm+zXgCw7g0k94njvI/t74iWLmggdB04t89/1O/w1cDnyilFU=
+
+handlers:
+- url: /.*
+  script: _go_app
